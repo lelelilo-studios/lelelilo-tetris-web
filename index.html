@@ -65,6 +65,38 @@
     // Browsers start sound only after a tap or a key: the game's audio context (window.__lelelilo_audio) is
     // resumed on the first one. The intro keeps presses to itself, so it passes them on here.
     window.__lelelilo_unlock = () => { const a = window.__lelelilo_audio; if (a && a.state !== 'running' && !document.hidden) a.resume().catch(() => {}); };
+    // What the game hands over to be shared (a result, a dare's link): a phone's own share sheet where there is
+    // one, and elsewhere wherever it can be pasted from. What was handed over last is left in __lelelilo_shared.
+    const finger = () => matchMedia('(pointer: coarse)').matches;
+    const copy = text => {
+      // (the old way borrows the keyboard for a moment: it is given back to whatever had it, or the game would no
+      // longer hear its keys)
+      const old = () => { const had = document.activeElement, t = document.createElement('textarea'); t.value = text; t.style.cssText = 'position:fixed;opacity:0';
+        document.body.appendChild(t); t.select(); try { document.execCommand('copy'); } catch (e) {} t.remove(); if (had && had.focus) had.focus(); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).catch(old); else old();
+    };
+    window.__lelelilo_share = text => {
+      window.__lelelilo_shared = String(text);
+      if (finger() && navigator.share) navigator.share({ text: String(text) }).catch(() => copy(String(text))); else copy(String(text));
+    };
+    // The picture of a page to keep, as the game drew it (RGBA bytes): made a PNG here, and given to the share sheet
+    // on a phone or saved as a file elsewhere. What it was is left in __lelelilo_kept.
+    window.__lelelilo_keep = (pixels, width, height, name) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      canvas.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(pixels.buffer, pixels.byteOffset, pixels.length), width, height), 0, 0);
+      canvas.toBlob(blob => {
+        if (!blob) return;
+        const file = String(name).replace(/[^a-z0-9-]/gi, '') + '.png';
+        window.__lelelilo_kept = { name: file, width, height, bytes: blob.size };
+        const picture = new File([blob], file, { type: 'image/png' });
+        if (finger() && navigator.canShare && navigator.canShare({ files: [picture] })) { navigator.share({ files: [picture], title: 'Lelelilo Tetris' }).catch(() => {}); return; }
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob); a.download = file;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+      }, 'image/png');
+    };
     // The game says when its first frame is up (or that it can't start): the intro then makes way
     let ready;
     const gameReady = new Promise(r => { ready = r; });
@@ -122,7 +154,7 @@
 </div>
 
 <script type="module">
-  const BUILD = 'd0eda71';
+  const BUILD = 'a1afd11';
   window.__lelelilo_build = BUILD;
   // The screen's safe area (notches, rounded corners, the home bar) in CSS pixels, for the game's layout
   const insetProbe = document.createElement('div');
